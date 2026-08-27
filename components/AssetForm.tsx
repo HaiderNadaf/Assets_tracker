@@ -24,6 +24,10 @@ import {
 } from "lucide-react";
 
 import FileInput from "./FileInput";
+import MultiFileInput, {
+  storedFileSlot,
+  type FileSlot,
+} from "./MultiFileInput";
 import DateField from "./DateField";
 import {
   Badge,
@@ -202,6 +206,8 @@ function initialState(asset?: Asset): FormState {
   };
 }
 
+const MAX_DOCS = 10;
+
 const grid = "grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3";
 
 /* ------------------------------------------------------------------ */
@@ -221,13 +227,15 @@ export default function AssetForm({
   const [saving, setSaving] = useState(false);
 
   const [photo, setPhoto] = useState<File | null>(null);
-  const [invoice, setInvoice] = useState<File | null>(null);
-  const [warrantyDoc, setWarrantyDoc] = useState<File | null>(null);
+  const [invoiceSlots, setInvoiceSlots] = useState<FileSlot[]>(() =>
+    (asset?.purchaseInvoices ?? []).map(storedFileSlot)
+  );
+  const [warrantySlots, setWarrantySlots] = useState<FileSlot[]>(() =>
+    (asset?.warranty?.documents ?? []).map(storedFileSlot)
+  );
   const [verificationPhoto, setVerificationPhoto] = useState<File | null>(null);
 
   const [removePhoto, setRemovePhoto] = useState(false);
-  const [removeInvoice, setRemoveInvoice] = useState(false);
-  const [removeWarrantyDoc, setRemoveWarrantyDoc] = useState(false);
   const [removeVerificationPhoto, setRemoveVerificationPhoto] = useState(false);
 
   const [services, setServices] = useState<ServiceRow[]>(() =>
@@ -385,14 +393,26 @@ export default function AssetForm({
     });
 
     if (photo) fd.append("photo", photo);
-    if (invoice) fd.append("purchaseInvoice", invoice);
-    if (warrantyDoc) fd.append("warrantyDocument", warrantyDoc);
+    // The id lists set the stored order server-side; new picks are appended.
+    fd.append(
+      "purchaseInvoiceIds",
+      JSON.stringify(invoiceSlots.filter((s) => s.stored).map((s) => s.stored!.publicId))
+    );
+    invoiceSlots.forEach((s) => {
+      if (s.file) fd.append("purchaseInvoice", s.file);
+    });
+
+    fd.append(
+      "warrantyDocumentIds",
+      JSON.stringify(warrantySlots.filter((s) => s.stored).map((s) => s.stored!.publicId))
+    );
+    warrantySlots.forEach((s) => {
+      if (s.file) fd.append("warrantyDocument", s.file);
+    });
     if (verificationPhoto) fd.append("verificationPhoto", verificationPhoto);
 
     if (isEdit) {
       if (removePhoto) fd.append("removePhoto", "true");
-      if (removeInvoice) fd.append("removePurchaseInvoice", "true");
-      if (removeWarrantyDoc) fd.append("removeWarrantyDocument", "true");
       if (removeVerificationPhoto) fd.append("removeVerificationPhoto", "true");
     } else {
       if (draftTransfers.length)
@@ -624,15 +644,13 @@ export default function AssetForm({
           </Field>
 
           <div className="sm:col-span-2">
-            <FileInput
-              label="🧾 Purchase Invoice"
-              variant="document"
-              file={invoice}
-              onFileChange={setInvoice}
-              existing={asset?.purchaseInvoice}
-              removed={removeInvoice}
-              onRemovedChange={setRemoveInvoice}
-              hint="PDF or image, max 10 MB"
+            <MultiFileInput
+              label="🧾 Purchase Invoices"
+              accept="image/*,application/pdf,.doc,.docx"
+              slots={invoiceSlots}
+              onChange={setInvoiceSlots}
+              max={MAX_DOCS}
+              hint="PDF or image, max 10 MB each"
             />
           </div>
         </div>
@@ -985,15 +1003,13 @@ export default function AssetForm({
           </Field>
 
           <div className="sm:col-span-2 lg:col-span-1">
-            <FileInput
-              label="📄 Warranty Document"
-              variant="document"
-              file={warrantyDoc}
-              onFileChange={setWarrantyDoc}
-              existing={asset?.warranty?.document}
-              removed={removeWarrantyDoc}
-              onRemovedChange={setRemoveWarrantyDoc}
-              hint="PDF or image, max 10 MB"
+            <MultiFileInput
+              label="📄 Warranty Documents"
+              accept="image/*,application/pdf,.doc,.docx"
+              slots={warrantySlots}
+              onChange={setWarrantySlots}
+              max={MAX_DOCS}
+              hint="PDF or image, max 10 MB each"
             />
           </div>
         </div>

@@ -536,16 +536,34 @@ export default function AssetDetail({ id }: { id: string }) {
 
           <SectionCard title="Documents" icon={<FileText size={16} />}>
             <div className="flex flex-col gap-2">
-              <DocLink
-                label="🧾 Purchase invoice"
-                file={asset.purchaseInvoice}
-                onOpen={setPreview}
-              />
-              <DocLink
-                label="📄 Warranty document"
-                file={asset.warranty.document}
-                onOpen={setPreview}
-              />
+              {(asset.purchaseInvoices?.length ? asset.purchaseInvoices : [null]).map(
+                (f, i, arr) => (
+                  <DocLink
+                    key={f?.publicId ?? "no-invoice"}
+                    label={
+                      arr.length > 1
+                        ? `🧾 Purchase invoice ${i + 1}${i === 0 ? " (primary)" : ""}`
+                        : "🧾 Purchase invoice"
+                    }
+                    file={f}
+                    onOpen={setPreview}
+                  />
+                )
+              )}
+              {(asset.warranty.documents?.length ? asset.warranty.documents : [null]).map(
+                (f, i, arr) => (
+                  <DocLink
+                    key={f?.publicId ?? "no-warranty"}
+                    label={
+                      arr.length > 1
+                        ? `📄 Warranty document ${i + 1}${i === 0 ? " (primary)" : ""}`
+                        : "📄 Warranty document"
+                    }
+                    file={f}
+                    onOpen={setPreview}
+                  />
+                )
+              )}
               <DocLink label="📷 Asset photo" file={asset.photo} onOpen={setPreview} />
               <DocLink
                 label="📸 Verification photo"

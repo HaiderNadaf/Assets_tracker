@@ -64,6 +64,8 @@ export interface Asset {
   productNumber: string;
   purchaseDate: string | null;
   paymentDate: string | null;
+  /** Full list. `purchaseInvoice` is the server-derived primary (index 0). */
+  purchaseInvoices: StoredFile[];
   purchaseInvoice?: StoredFile | null;
   invoiceNumber: string;
   vendor: string;
@@ -85,6 +87,7 @@ export interface Asset {
   warranty: {
     provider: string;
     expiryDate: string | null;
+    documents: StoredFile[];
     document?: StoredFile | null;
   };
   physicalVerification: {
