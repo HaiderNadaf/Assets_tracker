@@ -85,6 +85,7 @@ interface FormState {
   invoiceNumber: string;
   vendor: string;
   purchaseCost: string;
+  gstPercent: string;
   depMethod: DepreciationMethod;
   depRate: string;
   depLife: string;
@@ -182,6 +183,7 @@ function initialState(asset?: Asset): FormState {
     invoiceNumber: asset?.invoiceNumber ?? "",
     vendor: asset?.vendor ?? "",
     purchaseCost: asset?.purchaseCost ? String(asset.purchaseCost) : "",
+    gstPercent: asset?.gstPercent ? String(asset.gstPercent) : "",
     depMethod: asset?.depreciation?.method ?? "SLM",
     depRate: asset?.depreciation?.ratePercent ? String(asset.depreciation.ratePercent) : "",
     depLife: asset?.depreciation?.usefulLifeYears
@@ -252,6 +254,11 @@ export default function AssetForm({
 
   const serviceTotal = services.reduce((sum, r) => sum + (Number(r.serviceCost) || 0), 0);
 
+  // Mirrors the server's calculation so the figures update as you type.
+  const baseCost = Number(form.purchaseCost) || 0;
+  const gstAmount = Math.round(((baseCost * (Number(form.gstPercent) || 0)) / 100) * 100) / 100;
+  const totalCost = Math.round((baseCost + gstAmount) * 100) / 100;
+
   // Suggestions merge the starter catalogue with whatever is already saved.
   const productOptions = useMemo(
     () => Array.from(new Set([...ALL_PRODUCTS, ...(options?.products ?? [])])).sort(),
@@ -303,12 +310,6 @@ export default function AssetForm({
       next.employeeEmail = "Enter a valid email";
     if (
       form.purchaseDate &&
-      form.paymentDate &&
-      new Date(form.paymentDate) < new Date(form.purchaseDate)
-    )
-      next.paymentDate = "Payment cannot precede the purchase date";
-    if (
-      form.purchaseDate &&
       form.warrantyExpiry &&
       new Date(form.warrantyExpiry) < new Date(form.purchaseDate)
     )
@@ -330,6 +331,7 @@ export default function AssetForm({
     fd.append("invoiceNumber", form.invoiceNumber.trim());
     fd.append("vendor", form.vendor.trim());
     fd.append("purchaseCost", form.purchaseCost || "0");
+    fd.append("gstPercent", form.gstPercent || "0");
     fd.append("department", form.department.trim());
     fd.append("location", form.location.trim());
     fd.append("status", form.status);
@@ -604,17 +606,19 @@ export default function AssetForm({
 
           <Field
             label="💳 Payment Date"
-            error={errors.paymentDate}
-            hint={!errors.paymentDate ? "When the invoice was actually paid" : undefined}
+            hint="When the invoice was actually paid — may be before the purchase date"
           >
             <DateField
-              invalid={!!errors.paymentDate}
               value={form.paymentDate}
               onChange={(iso) => set("paymentDate", iso)}
             />
           </Field>
 
-          <Field label="💰 Purchase Cost" error={errors.purchaseCost} hint="Amount in ₹">
+          <Field
+            label="💰 Purchase Cost"
+            error={errors.purchaseCost}
+            hint="Taxable value, before GST"
+          >
             <Input
               type="number"
               min={0}
@@ -625,6 +629,34 @@ export default function AssetForm({
               onChange={(e) => set("purchaseCost", e.target.value)}
               placeholder="0.00"
             />
+          </Field>
+
+          <Field label="🧾 GST %" hint="e.g. 18, 12, 5 — leave blank if none">
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              step="0.01"
+              inputMode="decimal"
+              value={form.gstPercent}
+              onChange={(e) => set("gstPercent", e.target.value)}
+              placeholder="0"
+            />
+          </Field>
+
+          {/* Read-only: the server recomputes both from cost and rate, so showing
+              them as inputs would invite the two to drift apart. */}
+          <Field label="🧮 Total Cost" hint="Purchase cost + GST">
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2">
+              <div className="flex items-baseline justify-between text-xs text-zinc-500">
+                <span>GST amount</span>
+                <span className="font-medium text-zinc-700">{money(gstAmount)}</span>
+              </div>
+              <div className="mt-1 flex items-baseline justify-between border-t border-zinc-200 pt-1">
+                <span className="text-xs font-medium text-zinc-600">Total</span>
+                <span className="text-base font-bold text-brand-800">{money(totalCost)}</span>
+              </div>
+            </div>
           </Field>
 
           <Field label="Invoice Number">

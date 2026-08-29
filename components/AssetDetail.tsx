@@ -294,6 +294,12 @@ export default function AssetDetail({ id }: { id: string }) {
               <Fact label="Payment date" value={shortDate(asset.paymentDate)} />
               <Fact label="Invoice number" value={asset.invoiceNumber || "—"} mono />
               <Fact label="Vendor" value={asset.vendor || "—"} />
+              <Fact label="Purchase cost" value={money(asset.purchaseCost)} />
+              <Fact label={`GST (${asset.gstPercent ?? 0}%)`} value={money(asset.gstAmount ?? 0)} />
+              <Fact
+                label="Total cost"
+                value={money(asset.totalCost ?? asset.purchaseCost)}
+              />
               <Fact label="Product number" value={asset.productNumber || "—"} mono />
               <Fact label="Category" value={asset.category || "—"} />
               <Fact label="Brand" value={asset.brand || "—"} />

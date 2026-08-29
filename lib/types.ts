@@ -70,6 +70,10 @@ export interface Asset {
   invoiceNumber: string;
   vendor: string;
   purchaseCost: number;
+  gstPercent: number;
+  /** Derived on the server from purchaseCost and gstPercent. */
+  gstAmount?: number;
+  totalCost?: number;
   depreciation: {
     method: DepreciationMethod;
     ratePercent: number;

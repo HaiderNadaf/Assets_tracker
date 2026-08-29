@@ -66,6 +66,8 @@ type ColumnKey =
   | "productNumber"
   | "purchaseDate"
   | "purchaseCost"
+  | "gst"
+  | "totalCost"
   | "bookValue"
   | "assignedEmployee"
   | "department"
@@ -89,7 +91,15 @@ const COLUMNS: Column[] = [
   { key: "product", label: "Product", sortKey: "product", defaultOn: true },
   { key: "productNumber", label: "Product Number", defaultOn: true },
   { key: "purchaseDate", label: "Purchased", sortKey: "purchaseDate", defaultOn: true },
-  { key: "purchaseCost", label: "Cost", sortKey: "purchaseCost", align: "right", defaultOn: true },
+  {
+    key: "purchaseCost",
+    label: "Purchase Cost",
+    sortKey: "purchaseCost",
+    align: "right",
+    defaultOn: true,
+  },
+  { key: "gst", label: "GST", align: "right", defaultOn: true },
+  { key: "totalCost", label: "Total Cost", align: "right", defaultOn: true },
   { key: "bookValue", label: "Book Value", align: "right", defaultOn: true },
   { key: "assignedEmployee", label: "Assigned To", defaultOn: true },
   { key: "department", label: "Department", sortKey: "department", defaultOn: true },
@@ -101,7 +111,10 @@ const COLUMNS: Column[] = [
 
 const DEFAULT_COLUMNS = COLUMNS.filter((c) => c.defaultOn).map((c) => c.key);
 const VALID_KEYS = new Set<string>(COLUMNS.map((c) => c.key));
-const STORAGE_KEY = "assettrack.columns.v1";
+// Bumped when columns are added: a saved v1 layout has no knowledge of the new
+// keys, so it would silently hide them. Bumping resets the choice once rather
+// than leaving people wondering where the new columns went.
+const STORAGE_KEY = "assettrack.columns.v2";
 const DENSITY_KEY = "assettrack.density.v1";
 
 type Density = "compact" | "comfortable";
@@ -901,6 +914,25 @@ function Cell({
 
     case "purchaseCost":
       return <span className="whitespace-nowrap text-zinc-700">{money(asset.purchaseCost)}</span>;
+
+    case "gst":
+      // The rate is shown next to the amount, otherwise a bare figure is
+      // ambiguous when different assets carry different rates.
+      return asset.gstPercent ? (
+        <span className="whitespace-nowrap text-zinc-700">
+          {money(asset.gstAmount ?? 0)}
+          <span className="ml-1 text-xs text-zinc-400">{asset.gstPercent}%</span>
+        </span>
+      ) : (
+        <span className="text-zinc-300">—</span>
+      );
+
+    case "totalCost":
+      return (
+        <span className="whitespace-nowrap font-medium text-zinc-800">
+          {money(asset.totalCost ?? asset.purchaseCost)}
+        </span>
+      );
 
     case "bookValue":
       return (
