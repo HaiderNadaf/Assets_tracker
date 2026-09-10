@@ -86,3 +86,63 @@ export const LOCATIONS = [
 ];
 
 export const PAGE_SIZES = [10, 20, 50, 100];
+
+/* ------------------------------------------------------------------ */
+/* Purchase orders                                                     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Buyer blocks per company, mirroring the backend defaults.
+ *
+ * The form pre-fills from here and the value is then stored on the order, so an
+ * order issued today keeps this address even if the company later moves.
+ */
+export const BUYER_PROFILES: Record<string, { name: string; address: string; gstNumber: string }> = {
+  GCC: {
+    name: "GOLD COINS CLUB",
+    address:
+      "SY NO. 45/1, ANDAPURA VILLAGE, ATTIBELE HOBLI, ANEKAL TALUK, ELECTRONIC CITY POST, Bengaluru (Bangalore) Urban, Karnataka, 560100",
+    gstNumber: "29AAAAG1219N1ZM",
+  },
+  ENP: { name: "ENP", address: "", gstNumber: "" },
+};
+
+/** Seeded into a new order; every line stays editable. */
+export const DEFAULT_PO_TERMS = [
+  "Delivery: Within 3 Days after receipt with P.O & Approved drawing",
+  "Payment: 50% Advance 50% against materials delivery at site.",
+];
+
+export const PO_UNITS = [
+  "NOS",
+  "Lot",
+  "Set",
+  "Box",
+  "Pkt",
+  "Kg",
+  "Ltr",
+  "Mtr",
+  "RMT",
+  "SQFT",
+  "Hrs",
+  "Days",
+];
+
+/** Common hospital purchase heads, offered as suggestions on the line rows. */
+export const PO_CATEGORIES = [
+  "Medical Equipment",
+  "Surgical Consumables",
+  "Pharmacy & Drugs",
+  "Diagnostics & Lab",
+  "Patient Furniture",
+  "Linen & Uniforms",
+  "Housekeeping & Sanitation",
+  "Kitchen & Dietary",
+  "Civil & Interiors",
+  "Electrical & MEP",
+  "IT & Networking",
+  "Office & Stationery",
+  "Biomedical Services",
+  "Transportation Charges",
+  "Installation Charges",
+];

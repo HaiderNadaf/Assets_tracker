@@ -100,3 +100,17 @@ export function initials(name?: string | null): string {
     .map((p) => p[0]!.toUpperCase())
     .join("");
 }
+
+/**
+ * Purchase order states. Deliberately distinct from the asset status palette:
+ * an order being "Received" is not the same kind of fact as an asset being
+ * "Active", and reusing one colour scale for both would imply it is.
+ */
+export const PO_STATUS_STYLES: Record<string, string> = {
+  Draft: "bg-zinc-100 text-zinc-700 ring-zinc-200",
+  Sent: "bg-sky-100 text-sky-800 ring-sky-200",
+  Approved: "bg-indigo-100 text-indigo-800 ring-indigo-200",
+  "Partially Received": "bg-amber-100 text-amber-800 ring-amber-200",
+  Received: "bg-brand-100 text-brand-800 ring-brand-200",
+  Cancelled: "bg-rose-100 text-rose-800 ring-rose-200",
+};

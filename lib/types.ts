@@ -168,3 +168,160 @@ export interface AssetQuery {
   sortBy?: string;
   sortOrder?: "asc" | "desc";
 }
+
+/* ------------------------------------------------------------------ */
+/* Purchase orders                                                     */
+/* ------------------------------------------------------------------ */
+
+export const PO_STATUSES = [
+  "Draft",
+  "Sent",
+  "Approved",
+  "Partially Received",
+  "Received",
+  "Cancelled",
+] as const;
+export type PoStatus = (typeof PO_STATUSES)[number];
+
+/** How the tax line prints: one combined line, or split into its components. */
+export const GST_MODES = ["GST", "CGST+SGST", "IGST"] as const;
+export type GstMode = (typeof GST_MODES)[number];
+
+/**
+ * What a row of the order grid is. A heading names a group and carries no money,
+ * a sub is a priced member of the group above it, and an item is a priced row on
+ * its own. This is what drives the 1 / a / b / c / 2 numbering when printed.
+ */
+export const PO_ITEM_KINDS = ["item", "heading", "sub"] as const;
+export type PoItemKind = (typeof PO_ITEM_KINDS)[number];
+
+/** A buyer, supplier or delivery address block as printed on the order. */
+export interface Party {
+  name: string;
+  address: string;
+  gstNumber: string;
+}
+
+export interface Supplier extends Party {
+  contactPerson: string;
+  phone: string;
+  email: string;
+}
+
+export interface PoItem {
+  _id?: string;
+  kind: PoItemKind;
+  name: string;
+  description: string;
+  hsnCode: string;
+  quantity: number;
+  unit: string;
+  price: number;
+  /** Server-derived: the printed S.No, and quantity x price. */
+  label?: string;
+  amount?: number;
+}
+
+export interface PoTotals {
+  subTotal: number;
+  discount: number;
+  taxableAmount: number;
+  gstAmount: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
+  grandTotal: number;
+  itemCount: number;
+}
+
+export interface PurchaseOrder {
+  _id: string;
+  entity: Entity;
+  poNumber: string;
+  poDate: string | null;
+
+  buyer: Party;
+  supplier: Supplier;
+  deliverTo: Party;
+
+  supplierRef: string;
+  otherReference: string;
+
+  items: PoItem[];
+
+  discount: number;
+  gstPercent: number;
+  gstMode: GstMode;
+
+  status: PoStatus;
+  expectedDate: string | null;
+  department: string;
+  requestedBy: string;
+  approvedBy: string;
+
+  terms: string[];
+  notes: string;
+  attachments: StoredFile[];
+
+  createdAt: string;
+  updatedAt: string;
+  /** Derived on the server from the lines up. */
+  totals: PoTotals;
+}
+
+export interface PoListResponse {
+  success: boolean;
+  data: PurchaseOrder[];
+  pagination: Pagination;
+}
+
+export interface PoFilterOptions {
+  statuses: PoStatus[];
+  entities: Entity[];
+  gstModes: GstMode[];
+  suppliers: string[];
+  departments: string[];
+  requesters: string[];
+  units: string[];
+  buyers: Record<string, Party>;
+}
+
+export interface PoStats {
+  totalOrders: number;
+  totalValue: number;
+  openOrders: number;
+  openValue: number;
+  statusCounts: Record<PoStatus, number>;
+  byStatus: { name: string; count: number }[];
+  bySupplier: { name: string; count: number; value: number }[];
+  byEntity: { name: string; count: number; value: number }[];
+  monthly: { month: string; count: number; value: number }[];
+}
+
+/**
+ * The next number in one company's series.
+ *
+ * `style` says which convention that company already uses: "financial-year" for
+ * 049/2025-26, which restarts each April, or "plain" for a running 032 that
+ * never restarts. `financialYear` is null for the plain style.
+ */
+export interface NextPoNumber {
+  poNumber: string;
+  entity: string;
+  style: "financial-year" | "plain";
+  financialYear: string | null;
+}
+
+export interface PoQuery {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: string;
+  entity?: string;
+  supplier?: string;
+  department?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
+}
