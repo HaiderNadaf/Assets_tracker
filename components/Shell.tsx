@@ -7,6 +7,8 @@ import clsx from "clsx";
 import {
   Boxes,
   ChevronLeft,
+  ClipboardList,
+  FilePlus2,
   LayoutDashboard,
   Landmark,
   LogOut,
@@ -32,10 +34,29 @@ const NAV = [
   },
   { href: "/assets?entity=ENP", label: "ENP Assets", icon: Landmark, match: { entity: "ENP" } },
   { href: "/assets?entity=GCC", label: "GCC Assets", icon: Landmark, match: { entity: "GCC" } },
+  {
+    href: "/purchase-orders",
+    label: "Purchase Orders",
+    icon: ClipboardList,
+    match: {},
+  },
+  {
+    href: "/purchase-orders/new",
+    label: "Create PO",
+    icon: FilePlus2,
+    match: {},
+  },
 ] as const;
 
 function titleFor(pathname: string): string {
   if (pathname === "/dashboard") return "Dashboard";
+
+  if (pathname === "/purchase-orders") return "Purchase Orders";
+  if (pathname === "/purchase-orders/new") return "Create Purchase Order";
+  if (pathname.startsWith("/purchase-orders/")) {
+    return pathname.endsWith("/edit") ? "Edit Purchase Order" : "Purchase Order";
+  }
+
   if (pathname === "/assets/new") return "Create Asset";
   if (pathname.endsWith("/edit")) return "Edit Asset";
   if (/^\/assets\/[^/]+$/.test(pathname)) return "Asset Details";
@@ -50,7 +71,8 @@ export default function Shell({ children }: { children: React.ReactNode }) {
   const [signingOut, setSigningOut] = useState(false);
 
   // "/assets" is active only when no shortcut filter is applied, so exactly one
-  // sidebar row lights up at a time.
+  // sidebar row lights up at a time. The purchase register has filters of its
+  // own but no sidebar shortcuts, so it is never dimmed by them.
   const shortcutKeys = ["status", "verified", "entity"] as const;
   const hasShortcut = shortcutKeys.some((k) => searchParams.get(k));
 

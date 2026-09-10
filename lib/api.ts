@@ -4,6 +4,12 @@ import type {
   AssetQuery,
   FilterOptions,
   ListResponse,
+  NextPoNumber,
+  PoFilterOptions,
+  PoListResponse,
+  PoQuery,
+  PoStats,
+  PurchaseOrder,
   Stats,
 } from "./types";
 
@@ -36,7 +42,7 @@ export function apiError(err: unknown, fallback = "Something went wrong"): strin
  */
 const codePath = (id: string) => encodeURIComponent(id);
 
-function toParams(query: AssetQuery): Record<string, string> {
+function toParams(query: Record<string, unknown>): Record<string, string> {
   const params: Record<string, string> = {};
   for (const [key, value] of Object.entries(query)) {
     if (value === undefined || value === null || value === "") continue;
@@ -46,7 +52,9 @@ function toParams(query: AssetQuery): Record<string, string> {
 }
 
 export async function fetchAssets(query: AssetQuery): Promise<ListResponse> {
-  const { data } = await api.get<ListResponse>("/assets", { params: toParams(query) });
+  const { data } = await api.get<ListResponse>("/assets", {
+    params: toParams(query as Record<string, unknown>),
+  });
   return data;
 }
 
@@ -148,7 +156,98 @@ export const invoiceUrl = (id: string) =>
  * browser handles the download and the Content-Disposition filename.
  */
 export function exportUrl(query: AssetQuery): string {
-  const params = new URLSearchParams(toParams(query));
+  const params = new URLSearchParams(toParams(query as Record<string, unknown>));
   const qs = params.toString();
   return `${API_BASE}/api/assets/export${qs ? `?${qs}` : ""}`;
+}
+
+/* ------------------------------------------------------------------ */
+/* Purchase orders                                                     */
+/* ------------------------------------------------------------------ */
+
+export async function fetchPurchaseOrders(query: PoQuery): Promise<PoListResponse> {
+  const { data } = await api.get<PoListResponse>("/purchase-orders", {
+    params: toParams(query as Record<string, unknown>),
+  });
+  return data;
+}
+
+export async function fetchPurchaseOrder(id: string): Promise<PurchaseOrder> {
+  const { data } = await api.get<{ data: PurchaseOrder }>(
+    `/purchase-orders/${codePath(id)}`
+  );
+  return data.data;
+}
+
+export async function createPurchaseOrder(form: FormData): Promise<PurchaseOrder> {
+  const { data } = await api.post<{ data: PurchaseOrder }>("/purchase-orders", form);
+  return data.data;
+}
+
+export async function updatePurchaseOrder(
+  id: string,
+  form: FormData
+): Promise<PurchaseOrder> {
+  const { data } = await api.put<{ data: PurchaseOrder }>(
+    `/purchase-orders/${codePath(id)}`,
+    form
+  );
+  return data.data;
+}
+
+/** Moves an order along its workflow without reopening the whole form. */
+export async function setPurchaseOrderStatus(
+  id: string,
+  status: string
+): Promise<PurchaseOrder> {
+  const { data } = await api.patch<{ data: PurchaseOrder }>(
+    `/purchase-orders/${codePath(id)}/status`,
+    { status }
+  );
+  return data.data;
+}
+
+export async function deletePurchaseOrder(id: string): Promise<void> {
+  await api.delete(`/purchase-orders/${codePath(id)}`);
+}
+
+/**
+ * The next PO number in one company's series.
+ *
+ * Only a suggestion - nothing is reserved until the order is saved, so two
+ * people filling the form at once can be handed the same number and the second
+ * save is rejected as a duplicate.
+ */
+export async function fetchNextPoNumber(
+  entity: string,
+  date?: string
+): Promise<NextPoNumber> {
+  const { data } = await api.get<{ data: NextPoNumber }>(
+    "/purchase-orders/meta/next-number",
+    { params: toParams({ entity, date }) }
+  );
+  return data.data;
+}
+
+export async function fetchPoOptions(): Promise<PoFilterOptions> {
+  const { data } = await api.get<{ data: PoFilterOptions }>(
+    "/purchase-orders/meta/options"
+  );
+  return data.data;
+}
+
+export async function fetchPoStats(): Promise<PoStats> {
+  const { data } = await api.get<{ data: PoStats }>("/purchase-orders/meta/stats");
+  return data.data;
+}
+
+/** Direct link to the printed PO. */
+export const poPdfUrl = (id: string) =>
+  `${API_BASE}/api/purchase-orders/${codePath(id)}/pdf`;
+
+/** Direct link to the .xlsx export of the purchase register. */
+export function poExportUrl(query: PoQuery): string {
+  const params = new URLSearchParams(toParams(query as Record<string, unknown>));
+  const qs = params.toString();
+  return `${API_BASE}/api/purchase-orders/export${qs ? `?${qs}` : ""}`;
 }
