@@ -211,6 +211,16 @@ export async function deletePurchaseOrder(id: string): Promise<void> {
   await api.delete(`/purchase-orders/${codePath(id)}`);
 }
 
+/** Emails the printed PO to its supplier, from the buying company's own mailbox. */
+export async function emailPurchaseOrder(
+  id: string
+): Promise<{ to: string; from: string }> {
+  const { data } = await api.post<{ data: { to: string; from: string } }>(
+    `/purchase-orders/${codePath(id)}/email`
+  );
+  return data.data;
+}
+
 /**
  * The next PO number in one company's series.
  *

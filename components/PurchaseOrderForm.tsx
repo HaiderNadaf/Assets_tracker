@@ -36,6 +36,7 @@ import {
 } from "./ui";
 import {
   BUYER_PROFILES,
+  CURRENCIES,
   DEFAULT_PO_TERMS,
   DEPARTMENTS,
   PO_CATEGORIES,
@@ -90,8 +91,13 @@ interface FormState {
   buyer: PartyState;
   supplier: PartyState & { contactPerson: string; phone: string; email: string };
   deliverTo: PartyState;
+  vendorCode: string;
+  currency: string;
   supplierRef: string;
   otherReference: string;
+  paymentTerms: string;
+  project: string;
+  purchasingGroup: string;
   discount: string;
   gstPercent: string;
   gstMode: GstMode;
@@ -136,8 +142,13 @@ function initialState(po?: PurchaseOrder): FormState {
       email: po?.supplier?.email ?? "",
     },
     deliverTo: po?.deliverTo ?? emptyParty(),
+    vendorCode: po?.vendorCode ?? "",
+    currency: po?.currency ?? "INR",
     supplierRef: po?.supplierRef ?? "",
     otherReference: po?.otherReference ?? "",
+    paymentTerms: po?.paymentTerms ?? "",
+    project: po?.project ?? "",
+    purchasingGroup: po?.purchasingGroup ?? "",
     discount: po?.discount ? String(po.discount) : "",
     gstPercent: po?.gstPercent !== undefined ? String(po.gstPercent) : "18",
     gstMode: po?.gstMode ?? "GST",
@@ -234,6 +245,7 @@ export default function PurchaseOrderForm({
     (order?.attachments ?? []).map(storedFileSlot)
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
   /**
@@ -381,6 +393,14 @@ export default function PurchaseOrderForm({
     () => Array.from(new Set([...DEPARTMENTS, ...(options?.departments ?? [])])).sort(),
     [options]
   );
+  const projectOptions = useMemo(
+    () => Array.from(new Set(options?.projects ?? [])).sort(),
+    [options]
+  );
+  const purchasingGroupOptions = useMemo(
+    () => Array.from(new Set(options?.purchasingGroups ?? [])).sort(),
+    [options]
+  );
   const unitOptions = useMemo(
     () => Array.from(new Set([...PO_UNITS, ...(options?.units ?? [])])),
     [options]
@@ -390,11 +410,15 @@ export default function PurchaseOrderForm({
 
   function validate(): boolean {
     const next: Record<string, string> = {};
+    const nextRowErrors: Record<string, string> = {};
+
     if (!poNumber.trim()) next.poNumber = "Enter the PO number";
     if (!form.entity) next.entity = "Choose ENP or GCC";
     if (!form.supplier.name.trim()) next.supplierName = "Enter the supplier";
-    if (!rows.some((r) => r.kind !== "heading" && (r.name.trim() || r.description.trim())))
-      next.items = "Add at least one priced line";
+    const pricedRows = rows.filter(
+      (r) => r.kind !== "heading" && (r.name.trim() || r.description.trim())
+    );
+    if (!pricedRows.length) next.items = "Add at least one priced line";
     if (Number(form.gstPercent) < 0 || Number(form.gstPercent) > 100)
       next.gstPercent = "GST must be between 0 and 100";
     if (Number(form.discount) < 0) next.discount = "Discount cannot be negative";
@@ -406,7 +430,25 @@ export default function PurchaseOrderForm({
       new Date(form.expectedDate) < new Date(form.poDate)
     )
       next.expectedDate = "Delivery cannot be before the order date";
+
+    // Contact person, phone and a per-line HSN/SAC code are only enforced when
+    // raising a new order - an older order saved before this rule existed can
+    // still be opened and re-saved without being forced to backfill data that
+    // didn't used to be asked for.
+    if (!isEdit) {
+      if (!form.supplier.contactPerson.trim())
+        next.supplierContact = "Enter a contact person";
+      if (!form.supplier.phone.trim()) next.supplierPhone = "Enter a phone number";
+      for (const row of pricedRows) {
+        if (!row.hsnCode.trim()) nextRowErrors[row.key] = "HSN/SAC is required";
+      }
+      if (Object.keys(nextRowErrors).length && !next.items) {
+        next.items = "Add an HSN/SAC code for every item";
+      }
+    }
+
     setErrors(next);
+    setRowErrors(nextRowErrors);
     return Object.keys(next).length === 0;
   }
 
@@ -415,8 +457,13 @@ export default function PurchaseOrderForm({
     fd.append("entity", form.entity);
     fd.append("poNumber", poNumber.trim());
     fd.append("poDate", form.poDate);
+    fd.append("vendorCode", form.vendorCode.trim());
+    fd.append("currency", form.currency.trim() || "INR");
     fd.append("supplierRef", form.supplierRef.trim());
     fd.append("otherReference", form.otherReference.trim());
+    fd.append("paymentTerms", form.paymentTerms.trim());
+    fd.append("project", form.project.trim());
+    fd.append("purchasingGroup", form.purchasingGroup.trim());
     fd.append("discount", form.discount || "0");
     fd.append("gstPercent", form.gstPercent || "0");
     fd.append("gstMode", form.gstMode);
@@ -625,6 +672,52 @@ export default function PurchaseOrderForm({
               onChange={(e) => set("requestedBy", e.target.value)}
             />
           </Field>
+
+          <Field label="Currency">
+            <Select value={form.currency} onChange={(e) => set("currency", e.target.value)}>
+              {CURRENCIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
+          <Field label="Payment terms" hint="Printed on the order header">
+            <Input
+              value={form.paymentTerms}
+              onChange={(e) => set("paymentTerms", e.target.value)}
+              placeholder="As per PO / quotation"
+            />
+          </Field>
+
+          <Field label="Project" hint="The job this order is raised against">
+            <Input
+              list="po-projects"
+              value={form.project}
+              onChange={(e) => set("project", e.target.value)}
+              placeholder="Construction of Warehouse"
+            />
+            <datalist id="po-projects">
+              {projectOptions.map((p) => (
+                <option key={p} value={p} />
+              ))}
+            </datalist>
+          </Field>
+
+          <Field label="Purchasing group">
+            <Input
+              list="po-purchasing-groups"
+              value={form.purchasingGroup}
+              onChange={(e) => set("purchasingGroup", e.target.value)}
+              placeholder="ENP / PROJECTS"
+            />
+            <datalist id="po-purchasing-groups">
+              {purchasingGroupOptions.map((p) => (
+                <option key={p} value={p} />
+              ))}
+            </datalist>
+          </Field>
         </div>
       </SectionCard>
 
@@ -659,6 +752,15 @@ export default function PurchaseOrderForm({
             />
           </Field>
 
+          <Field label="Vendor code" hint="Their code in your vendor master, if any">
+            <Input
+              value={form.vendorCode}
+              onChange={(e) => set("vendorCode", e.target.value)}
+              placeholder="SCPRO14"
+              className="font-mono"
+            />
+          </Field>
+
           <Field label="Address" className="sm:col-span-2">
             <Textarea
               rows={2}
@@ -668,17 +770,23 @@ export default function PurchaseOrderForm({
             />
           </Field>
 
-          <Field label="Contact person">
+          <Field
+            label="Contact person"
+            required={!isEdit}
+            error={errors.supplierContact}
+          >
             <Input
               value={form.supplier.contactPerson}
+              invalid={!!errors.supplierContact}
               onChange={(e) => setSupplier({ contactPerson: e.target.value })}
             />
           </Field>
 
           <div className="grid grid-cols-2 gap-4">
-            <Field label="Phone">
+            <Field label="Phone" required={!isEdit} error={errors.supplierPhone}>
               <Input
                 value={form.supplier.phone}
+                invalid={!!errors.supplierPhone}
                 onChange={(e) => setSupplier({ phone: e.target.value })}
               />
             </Field>
@@ -902,9 +1010,15 @@ export default function PurchaseOrderForm({
                         onChange={(e) => updateRow(row.key, { price: e.target.value })}
                       />
                     </Field>
-                    <Field label="HSN/SAC" className="lg:col-span-1">
+                    <Field
+                      label="HSN/SAC"
+                      required={!isEdit}
+                      error={rowErrors[row.key]}
+                      className="lg:col-span-1"
+                    >
                       <Input
                         value={row.hsnCode}
+                        invalid={!!rowErrors[row.key]}
                         onChange={(e) => updateRow(row.key, { hsnCode: e.target.value })}
                       />
                     </Field>

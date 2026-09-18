@@ -244,8 +244,13 @@ export interface PurchaseOrder {
   supplier: Supplier;
   deliverTo: Party;
 
+  vendorCode: string;
+  currency: string;
   supplierRef: string;
   otherReference: string;
+  paymentTerms: string;
+  project: string;
+  purchasingGroup: string;
 
   items: PoItem[];
 
@@ -282,6 +287,8 @@ export interface PoFilterOptions {
   suppliers: string[];
   departments: string[];
   requesters: string[];
+  projects: string[];
+  purchasingGroups: string[];
   units: string[];
   buyers: Record<string, Party>;
 }

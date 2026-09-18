@@ -11,6 +11,7 @@ import {
   ClipboardList,
   FileText,
   Landmark,
+  Mail,
   Paperclip,
   Pencil,
   ScrollText,
@@ -27,11 +28,18 @@ import {
   apiError,
   deletePurchaseOrder as deleteApi,
   downloadFile,
+  emailPurchaseOrder,
   fetchPurchaseOrder,
   poPdfUrl,
   setPurchaseOrderStatus,
 } from "@/lib/api";
 import { PO_STATUSES, type PoStatus, type PurchaseOrder } from "@/lib/types";
+
+/** Shown in the send-email confirmation only — the server decides the real sender. */
+const SENDER_BY_ENTITY: Record<string, string> = {
+  ENP: "onerootoffice@oneroot.farm",
+  GCC: "accounts@goldcoinsresort.in",
+};
 
 export default function PurchaseOrderDetail({ id }: { id: string }) {
   const router = useRouter();
@@ -45,6 +53,8 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
   const [savingStatus, setSavingStatus] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [confirmEmail, setConfirmEmail] = useState(false);
+  const [emailing, setEmailing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,6 +84,21 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
       toast.error((err as Error).message, { id: toastId });
     } finally {
       setPrinting(false);
+    }
+  }
+
+  async function onSendEmail() {
+    if (!order) return;
+    setEmailing(true);
+    const toastId = toast.loading("Sending…");
+    try {
+      const { to } = await emailPurchaseOrder(order._id);
+      toast.success(`PO emailed to ${to}`, { id: toastId });
+      setConfirmEmail(false);
+    } catch (err) {
+      toast.error(apiError(err, "Could not send the email"), { id: toastId });
+    } finally {
+      setEmailing(false);
     }
   }
 
@@ -190,6 +215,20 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
               {printing ? "Building…" : "Download PDF"}
             </Button>
 
+            <Button
+              variant="secondary"
+              onClick={() => setConfirmEmail(true)}
+              disabled={!order.supplier.email}
+              title={
+                order.supplier.email
+                  ? undefined
+                  : "Add an email address for the supplier first"
+              }
+            >
+              <Mail size={15} />
+              Send Email
+            </Button>
+
             <Link
               href={`/purchase-orders/${encodeURIComponent(order._id)}/edit`}
               className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
@@ -231,6 +270,10 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
             value={shortDate(order.expectedDate)}
             icon={<Truck size={13} />}
           />
+          <Pair label="Currency" value={order.currency} />
+          <Pair label="Payment terms" value={order.paymentTerms} />
+          <Pair label="Project" value={order.project} />
+          <Pair label="Purchasing group" value={order.purchasingGroup} />
           <Pair label="Supplier's ref." value={order.supplierRef} />
           <Pair label="Other reference(s)" value={order.otherReference} />
           <Pair label="Department" value={order.department} />
@@ -256,6 +299,7 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
           name={order.supplier.name}
           address={order.supplier.address}
           gstNumber={order.supplier.gstNumber}
+          vendorCode={order.vendorCode}
           extra={[
             order.supplier.contactPerson,
             order.supplier.phone,
@@ -433,6 +477,37 @@ export default function PurchaseOrderDetail({ id }: { id: string }) {
         </p>
         <p className="mt-2 text-sm font-medium text-rose-600">This cannot be undone.</p>
       </Modal>
+
+      <Modal
+        open={confirmEmail}
+        title="Send purchase order by email"
+        onClose={() => setConfirmEmail(false)}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              onClick={() => setConfirmEmail(false)}
+              disabled={emailing}
+            >
+              Cancel
+            </Button>
+            <Button onClick={() => void onSendEmail()} disabled={emailing}>
+              {emailing ? <Spinner /> : <Mail size={15} />}
+              {emailing ? "Sending…" : "Send"}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-zinc-600">
+          This emails PO{" "}
+          <span className="font-mono font-semibold text-zinc-900">{order.poNumber}</span> to{" "}
+          <span className="font-medium text-zinc-900">{order.supplier.email}</span>, from{" "}
+          <span className="font-medium text-zinc-900">
+            {SENDER_BY_ENTITY[order.entity] ?? "the company mailbox"}
+          </span>
+          .
+        </p>
+      </Modal>
     </div>
   );
 }
@@ -501,6 +576,7 @@ function PartyCard({
   name,
   address,
   gstNumber,
+  vendorCode,
   extra,
 }: {
   title: string;
@@ -508,11 +584,19 @@ function PartyCard({
   name: string;
   address: string;
   gstNumber: string;
+  vendorCode?: string;
   extra?: string[];
 }) {
   return (
     <SectionCard title={title} icon={icon}>
-      <p className="text-sm font-semibold text-zinc-900">{name || "—"}</p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-zinc-900">{name || "—"}</p>
+        {vendorCode && (
+          <span className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[11px] text-zinc-600">
+            {vendorCode}
+          </span>
+        )}
+      </div>
       {address && (
         <p className="mt-1 whitespace-pre-wrap text-sm text-zinc-600">{address}</p>
       )}

@@ -99,13 +99,16 @@ export const PAGE_SIZES = [10, 20, 50, 100];
  */
 export const BUYER_PROFILES: Record<string, { name: string; address: string; gstNumber: string }> = {
   GCC: {
-    name: "GOLD COINS CLUB",
+    name: "Gold Coins Club & Resort",
     address:
       "SY NO. 45/1, ANDAPURA VILLAGE, ATTIBELE HOBLI, ANEKAL TALUK, ELECTRONIC CITY POST, Bengaluru (Bangalore) Urban, Karnataka, 560100",
     gstNumber: "29AAAAG1219N1ZM",
   },
-  ENP: { name: "ENP", address: "", gstNumber: "" },
+  ENP: { name: "ENP Farms Pvt Ltd", address: "", gstNumber: "" },
 };
+
+/** Offered on the currency field; free text is accepted too. */
+export const CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED"];
 
 /** Seeded into a new order; every line stays editable. */
 export const DEFAULT_PO_TERMS = [
