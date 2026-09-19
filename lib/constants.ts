@@ -131,6 +131,31 @@ export const PO_UNITS = [
   "Days",
 ];
 
+/* ------------------------------------------------------------------ */
+/* Vendors                                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Starter suggestions for the vendor category field. Free text underneath -
+ * typing anything not on this list just adds a new category, the same way
+ * PO_CATEGORIES below offers suggestions without limiting what can be typed.
+ */
+export const VENDOR_CATEGORIES = [
+  "Steel & Structural",
+  "Cement & Civil",
+  "Electrical & MEP",
+  "Plumbing & Sanitary",
+  "Cladding & Roofing",
+  "Furniture & Furnishings",
+  "Housekeeping & Sanitation",
+  "Kitchen & F&B Supplies",
+  "IT & Networking",
+  "Office & Stationery",
+  "Transportation & Logistics",
+  "Farm & Agriculture Inputs",
+  "General",
+];
+
 /** Common hospital purchase heads, offered as suggestions on the line rows. */
 export const PO_CATEGORIES = [
   "Medical Equipment",

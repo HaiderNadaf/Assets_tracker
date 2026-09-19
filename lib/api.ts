@@ -11,6 +11,7 @@ import type {
   PoStats,
   PurchaseOrder,
   Stats,
+  Vendor,
 } from "./types";
 
 export const API_BASE =
@@ -260,4 +261,54 @@ export function poExportUrl(query: PoQuery): string {
   const params = new URLSearchParams(toParams(query as Record<string, unknown>));
   const qs = params.toString();
   return `${API_BASE}/api/purchase-orders/export${qs ? `?${qs}` : ""}`;
+}
+
+/* ------------------------------------------------------------------ */
+/* Vendors                                                             */
+/* ------------------------------------------------------------------ */
+
+export async function fetchVendors(search?: string): Promise<Vendor[]> {
+  const { data } = await api.get<{ data: Vendor[] }>("/vendors", {
+    params: toParams({ search }),
+  });
+  return data.data;
+}
+
+/** The next free code in the plain "VEN0001" series - a suggestion only. */
+export async function fetchNextVendorCode(category?: string): Promise<string> {
+  const { data } = await api.get<{ data: { vendorCode: string } }>(
+    "/vendors/meta/next-code",
+    { params: toParams({ category }) }
+  );
+  return data.data.vendorCode;
+}
+
+/** Every category already used by a saved vendor - suggestions, not a fixed list. */
+export async function fetchVendorCategories(): Promise<string[]> {
+  const { data } = await api.get<{ data: string[] }>("/vendors/meta/categories");
+  return data.data;
+}
+
+export async function fetchVendor(id: string): Promise<Vendor> {
+  const { data } = await api.get<{ data: Vendor }>(`/vendors/${codePath(id)}`);
+  return data.data;
+}
+
+export async function createVendor(
+  payload: Omit<Vendor, "_id" | "createdAt" | "updatedAt">
+): Promise<Vendor> {
+  const { data } = await api.post<{ data: Vendor }>("/vendors", payload);
+  return data.data;
+}
+
+export async function updateVendor(
+  id: string,
+  payload: Omit<Vendor, "_id" | "createdAt" | "updatedAt">
+): Promise<Vendor> {
+  const { data } = await api.put<{ data: Vendor }>(`/vendors/${codePath(id)}`, payload);
+  return data.data;
+}
+
+export async function deleteVendor(id: string): Promise<void> {
+  await api.delete(`/vendors/${codePath(id)}`);
 }

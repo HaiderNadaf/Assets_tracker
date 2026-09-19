@@ -6,6 +6,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import clsx from "clsx";
 import {
   Boxes,
+  Building2,
   ChevronLeft,
   ClipboardList,
   FilePlus2,
@@ -46,6 +47,12 @@ const NAV = [
     icon: FilePlus2,
     match: {},
   },
+  {
+    href: "/vendors",
+    label: "Vendors",
+    icon: Building2,
+    match: {},
+  },
 ] as const;
 
 function titleFor(pathname: string): string {
@@ -55,6 +62,12 @@ function titleFor(pathname: string): string {
   if (pathname === "/purchase-orders/new") return "Create Purchase Order";
   if (pathname.startsWith("/purchase-orders/")) {
     return pathname.endsWith("/edit") ? "Edit Purchase Order" : "Purchase Order";
+  }
+
+  if (pathname === "/vendors") return "Vendors";
+  if (pathname === "/vendors/new") return "Add Vendor";
+  if (pathname.startsWith("/vendors/")) {
+    return pathname.endsWith("/edit") ? "Edit Vendor" : "Vendor";
   }
 
   if (pathname === "/assets/new") return "Create Asset";

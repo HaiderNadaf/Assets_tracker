@@ -17,6 +17,7 @@ import {
   RotateCcw,
   Save,
   ScrollText,
+  Tag,
   Trash2,
   Truck,
   Wand2,
@@ -41,12 +42,15 @@ import {
   DEPARTMENTS,
   PO_CATEGORIES,
   PO_UNITS,
+  VENDOR_CATEGORIES,
 } from "@/lib/constants";
 import { dateInput, money } from "@/lib/format";
 import {
   apiError,
   createPurchaseOrder as createApi,
   fetchNextPoNumber,
+  fetchNextVendorCode,
+  fetchVendors,
   updatePurchaseOrder as updateApi,
 } from "@/lib/api";
 import {
@@ -60,6 +64,7 @@ import {
   type PoStatus,
   type PurchaseOrder,
   type NextPoNumber,
+  type Vendor,
 } from "@/lib/types";
 
 /* ------------------------------------------------------------------ */
@@ -248,6 +253,113 @@ export default function PurchaseOrderForm({
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
+  // The vendor master, fetched once - a suggestion source only, so a failed
+  // request leaves the Supplier section exactly as free-form as it always was.
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  useEffect(() => {
+    fetchVendors()
+      .then(setVendors)
+      .catch(() => setVendors([]));
+  }, []);
+
+  // Picking a saved vendor's exact name fills in the rest of the Supplier
+  // section from the vendor master, the same way choosing the company fills
+  // in the buyer block.
+  const matchedVendor = useMemo(
+    () =>
+      vendors.find(
+        (v) => v.name.trim().toLowerCase() === form.supplier.name.trim().toLowerCase()
+      ) ?? null,
+    [vendors, form.supplier.name]
+  );
+
+  // New "what they supply" tags to fold into the vendor master on save - kept
+  // separate from `matchedVendor.suppliesTags`, which is just a read-only
+  // display of what the vendor master already knows.
+  const [supplyTagInput, setSupplyTagInput] = useState("");
+  const [supplyTags, setSupplyTags] = useState<string[]>([]);
+
+  const addSupplyTag = () => {
+    const value = supplyTagInput.trim();
+    if (!value) return;
+    const known = matchedVendor?.suppliesTags ?? [];
+    const already = [...known, ...supplyTags].some(
+      (t) => t.toLowerCase() === value.toLowerCase()
+    );
+    if (!already) setSupplyTags((list) => [...list, value]);
+    setSupplyTagInput("");
+  };
+
+  const removeSupplyTag = (tag: string) =>
+    setSupplyTags((list) => list.filter((t) => t !== tag));
+
+  // Only asked for a brand-new vendor - a matched vendor already has its own
+  // category, set from the Vendor tab. Suggestions merge the vendor master's
+  // own categories with a starter list, same idea as the supplier datalist.
+  const [supplierCategory, setSupplierCategory] = useState("");
+  const categoryOptions = useMemo(
+    () =>
+      Array.from(
+        new Set([...VENDOR_CATEGORIES, ...vendors.map((v) => v.category).filter(Boolean)])
+      ).sort(),
+    [vendors]
+  );
+
+  /**
+   * A suggested code for a brand-new vendor, the same "Auto" pattern the PO
+   * number uses. Only relevant when the supplier doesn't match a saved
+   * vendor - a matched vendor's own code already fills the field, and
+   * overriding that with a freshly generated one would be wrong. Debounced:
+   * category is free text, so a fetch per keystroke would hammer the API.
+   */
+  const [autoVendorCode, setAutoVendorCode] = useState<string | null>(null);
+  const [manualVendorCode, setManualVendorCode] = useState(isEdit);
+
+  useEffect(() => {
+    if (isEdit) return;
+    let cancelled = false;
+    const t = setTimeout(() => {
+      // No category typed yet -> a new vendor would land in General, so the
+      // suggestion matches that series until a category is actually picked.
+      fetchNextVendorCode(supplierCategory || "General")
+        .then((code) => {
+          if (!cancelled) setAutoVendorCode(code);
+        })
+        .catch(() => {
+          if (!cancelled) setAutoVendorCode(null);
+        });
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [isEdit, supplierCategory]);
+
+  const vendorCode =
+    !matchedVendor && !manualVendorCode ? (autoVendorCode ?? form.vendorCode) : form.vendorCode;
+
+  function onSupplierNameChange(value: string) {
+    const match = vendors.find(
+      (v) => v.name.trim().toLowerCase() === value.trim().toLowerCase()
+    );
+    if (match) {
+      setForm((f) => ({
+        ...f,
+        vendorCode: match.vendorCode || f.vendorCode,
+        supplier: {
+          name: match.name,
+          gstNumber: match.gstNumber,
+          address: match.address,
+          contactPerson: match.contactPerson,
+          phone: match.phone,
+          email: match.email,
+        },
+      }));
+    } else {
+      setSupplier({ name: value });
+    }
+  }
+
   /**
    * The number the server would hand out next for this company, and whether the
    * user has overridden it.
@@ -389,6 +501,16 @@ export default function PurchaseOrderForm({
             : `Next in ${form.entity}'s series - each company counts separately`
         : "As printed, e.g. 049/2025-26";
 
+  // Suppliers already used on a PO, plus every saved vendor - so a vendor with
+  // no orders yet still shows up as a suggestion.
+  const supplierSuggestions = useMemo(
+    () =>
+      Array.from(
+        new Set([...(options?.suppliers ?? []), ...vendors.map((v) => v.name)])
+      ).sort(),
+    [options, vendors]
+  );
+
   const departmentOptions = useMemo(
     () => Array.from(new Set([...DEPARTMENTS, ...(options?.departments ?? [])])).sort(),
     [options]
@@ -457,7 +579,7 @@ export default function PurchaseOrderForm({
     fd.append("entity", form.entity);
     fd.append("poNumber", poNumber.trim());
     fd.append("poDate", form.poDate);
-    fd.append("vendorCode", form.vendorCode.trim());
+    fd.append("vendorCode", vendorCode.trim());
     fd.append("currency", form.currency.trim() || "INR");
     fd.append("supplierRef", form.supplierRef.trim());
     fd.append("otherReference", form.otherReference.trim());
@@ -477,6 +599,9 @@ export default function PurchaseOrderForm({
     fd.append("buyer", JSON.stringify(form.buyer));
     fd.append("deliverTo", JSON.stringify(form.deliverTo));
     fd.append("supplier", JSON.stringify(form.supplier));
+    // Not part of the order itself - folded into the vendor master on save.
+    fd.append("supplierSuppliesTags", JSON.stringify(supplyTags));
+    fd.append("supplierCategory", supplierCategory.trim());
 
     // Blank rows are dropped rather than saved as empty lines.
     fd.append(
@@ -728,20 +853,106 @@ export default function PurchaseOrderForm({
         description="Who the order is placed with"
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Supplier name" required error={errors.supplierName}>
+          <Field
+            label="Supplier name"
+            required
+            error={errors.supplierName}
+            hint={
+              errors.supplierName
+                ? undefined
+                : "Pick a saved vendor to fill in their details, or type a new one"
+            }
+            className="sm:col-span-2"
+          >
             <Input
               list="po-suppliers"
               value={form.supplier.name}
               invalid={!!errors.supplierName}
-              onChange={(e) => setSupplier({ name: e.target.value })}
+              onChange={(e) => onSupplierNameChange(e.target.value)}
               placeholder="FUTURE TECH MEP SERVICES"
             />
             <datalist id="po-suppliers">
-              {(options?.suppliers ?? []).map((s) => (
+              {supplierSuggestions.map((s) => (
                 <option key={s} value={s} />
               ))}
             </datalist>
           </Field>
+
+          {!matchedVendor && (
+            <Field
+              label="Category"
+              className="sm:col-span-2"
+              hint="Pick one, or type a new category - only asked for a brand-new vendor"
+            >
+              <Input
+                list="po-vendor-categories"
+                value={supplierCategory}
+                onChange={(e) => setSupplierCategory(e.target.value)}
+                placeholder="Steel & Structural"
+              />
+              <datalist id="po-vendor-categories">
+                {categoryOptions.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
+            </Field>
+          )}
+
+          <div className="sm:col-span-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-zinc-700">
+              <Tag size={13} />
+              What do they supply?
+            </div>
+            <p className="mt-0.5 text-[11px] text-zinc-500">
+              Saved to the vendor list even if it isn&rsquo;t part of this order - helps you
+              find this vendor later.
+            </p>
+
+            {(matchedVendor?.suppliesTags.length || supplyTags.length) ? (
+              <div className="mt-2.5 flex flex-wrap gap-1.5">
+                {(matchedVendor?.suppliesTags ?? []).map((tag) => (
+                  <Badge key={`known-${tag}`} className="bg-brand-100 text-brand-800 ring-brand-200">
+                    {tag}
+                  </Badge>
+                ))}
+                {supplyTags.map((tag) => (
+                  <span
+                    key={`new-${tag}`}
+                    className="inline-flex items-center gap-1 rounded-full border border-dashed border-brand-400 bg-white px-2.5 py-1 text-xs font-medium text-brand-700"
+                  >
+                    {tag}
+                    <button
+                      type="button"
+                      onClick={() => removeSupplyTag(tag)}
+                      aria-label={`Remove ${tag}`}
+                      className="rounded-full hover:bg-brand-50"
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : null}
+
+            <div className="mt-2.5 flex items-center gap-2">
+              <Input
+                value={supplyTagInput}
+                onChange={(e) => setSupplyTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    addSupplyTag();
+                  }
+                }}
+                placeholder="Brick"
+                className="max-w-[220px]"
+              />
+              <Button type="button" variant="secondary" onClick={addSupplyTag}>
+                <Plus size={14} />
+                Add
+              </Button>
+            </div>
+          </div>
 
           <Field label="GST number">
             <Input
@@ -752,13 +963,41 @@ export default function PurchaseOrderForm({
             />
           </Field>
 
-          <Field label="Vendor code" hint="Their code in your vendor master, if any">
-            <Input
-              value={form.vendorCode}
-              onChange={(e) => set("vendorCode", e.target.value)}
-              placeholder="SCPRO14"
-              className="font-mono"
-            />
+          <Field
+            label="Vendor code"
+            hint={matchedVendor ? "Their code in your vendor master, if any" : undefined}
+          >
+            <div className="flex items-center gap-2">
+              <Input
+                value={vendorCode}
+                onChange={(e) => {
+                  setManualVendorCode(true);
+                  set("vendorCode", e.target.value);
+                }}
+                placeholder="SCPRO14"
+                className="font-mono"
+              />
+              {!isEdit && !matchedVendor && autoVendorCode && manualVendorCode && (
+                <button
+                  type="button"
+                  onClick={() => setManualVendorCode(false)}
+                  title={`Use ${autoVendorCode}, the next free code`}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 px-2.5 py-2 text-xs font-medium text-brand-800 hover:bg-brand-100"
+                >
+                  <RotateCcw size={13} />
+                  Auto
+                </button>
+              )}
+              {!isEdit && !matchedVendor && !manualVendorCode && vendorCode && (
+                <span
+                  title="Filled automatically for this new vendor - type over it to use your own"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-md bg-brand-100 px-2 py-1.5 text-[11px] font-semibold text-brand-800"
+                >
+                  <Wand2 size={12} />
+                  Auto
+                </span>
+              )}
+            </div>
           </Field>
 
           <Field label="Address" className="sm:col-span-2">

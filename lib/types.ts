@@ -332,3 +332,31 @@ export interface PoQuery {
   sortBy?: string;
   sortOrder?: "asc" | "desc";
 }
+
+/* ------------------------------------------------------------------ */
+/* Vendors                                                             */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The vendor master: one shared list across both companies. Picking a vendor
+ * on a purchase order pre-fills the Supplier section from here, but the PO
+ * keeps its own copy from then on - editing a vendor later does not rewrite
+ * orders already raised against it.
+ */
+export interface Vendor {
+  _id: string;
+  name: string;
+  vendorCode: string;
+  /** What this vendor is bought for, e.g. "STEEL" - drives the vendor code's prefix. */
+  category: string;
+  gstNumber: string;
+  address: string;
+  contactPerson: string;
+  phone: string;
+  email: string;
+  /** What this vendor is known to supply, e.g. "MS Structural Steel". */
+  suppliesTags: string[];
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
