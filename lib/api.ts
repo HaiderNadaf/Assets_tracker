@@ -2,6 +2,8 @@ import axios, { AxiosError } from "axios";
 import type {
   Asset,
   AssetQuery,
+  ExtractedAssetData,
+  ExtractedPoData,
   FilterOptions,
   ListResponse,
   NextPoNumber,
@@ -236,6 +238,52 @@ export async function fetchNextPoNumber(
   const { data } = await api.get<{ data: NextPoNumber }>(
     "/purchase-orders/meta/next-number",
     { params: toParams({ entity, date }) }
+  );
+  return data.data;
+}
+
+/**
+ * Reads a vendor quotation/invoice/old-PO PDF and returns fields to pre-fill
+ * the New PO form with. Nothing is saved by this call - it only reads the
+ * file; the order is still created through the normal save, same as always.
+ */
+export async function extractPoFromPdf(file: File): Promise<ExtractedPoData> {
+  const fd = new FormData();
+  fd.append("pdf", file);
+  const { data } = await api.post<{ data: ExtractedPoData }>(
+    "/purchase-orders/meta/extract-pdf",
+    fd,
+    { timeout: 120000 }
+  );
+  return data.data;
+}
+
+/**
+ * The next FA code in one company's series.
+ *
+ * Only a suggestion - nothing is reserved until the asset is saved, so two
+ * people filling the form at once can be handed the same code and the second
+ * save is rejected as a duplicate.
+ */
+export async function fetchNextAssetCode(entity: string): Promise<string> {
+  const { data } = await api.get<{ data: { assetCode: string } }>("/assets/meta/next-code", {
+    params: toParams({ entity }),
+  });
+  return data.data.assetCode;
+}
+
+/**
+ * Reads a purchase invoice PDF or photo and returns fields to pre-fill the
+ * Create Asset form with. Nothing is saved by this call - it only reads the
+ * file; the asset is still created through the normal save, same as always.
+ */
+export async function extractAssetFromDocument(file: File): Promise<ExtractedAssetData> {
+  const fd = new FormData();
+  fd.append("pdf", file);
+  const { data } = await api.post<{ data: ExtractedAssetData }>(
+    "/assets/meta/extract-pdf",
+    fd,
+    { timeout: 120000 }
   );
   return data.data;
 }

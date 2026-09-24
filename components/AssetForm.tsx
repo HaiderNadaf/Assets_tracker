@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import toast from "react-hot-toast";
@@ -11,14 +11,17 @@ import {
   CalendarDays,
   ClipboardCheck,
   FileText,
+  FileUp,
   Info,
   Laptop,
   Plus,
   Landmark,
+  RotateCcw,
   Save,
   ShieldCheck,
   TrendingDown,
   Trash2,
+  Wand2,
   Wrench,
   X,
 } from "lucide-react";
@@ -53,6 +56,8 @@ import { dateInput, money, shortDate, ENTITY_STYLES, STATUS_STYLES } from "@/lib
 import {
   createAsset as createAssetApi,
   updateAsset as updateAssetApi,
+  extractAssetFromDocument,
+  fetchNextAssetCode,
   apiError,
 } from "@/lib/api";
 import {
@@ -227,6 +232,36 @@ export default function AssetForm({
   const [form, setForm] = useState<FormState>(() => initialState(asset));
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+
+  /**
+   * The FA code the server would hand out next for this company, and whether
+   * the user has overridden it - the same "Auto" pattern the PO form uses for
+   * PO numbers. Each company counts its own series, so switching company
+   * re-derives the suggestion. An existing asset is never renumbered, so
+   * editing starts out "manual" and the suggestion is never fetched.
+   */
+  const [autoCode, setAutoCode] = useState<string | null>(null);
+  const [manualCode, setManualCode] = useState(isEdit);
+
+  useEffect(() => {
+    if (isEdit || !form.entity) return;
+    let cancelled = false;
+    fetchNextAssetCode(form.entity)
+      .then((code) => {
+        if (!cancelled) setAutoCode(code);
+      })
+      .catch(() => {
+        // Suggestion only - a failure here must not block typing a code.
+        if (!cancelled) setAutoCode(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isEdit, form.entity]);
+
+  // Shows the suggestion until the user types, and their own value from then on.
+  const assetCode = manualCode ? form.assetCode : (autoCode ?? form.assetCode);
 
   const [photo, setPhoto] = useState<File | null>(null);
   const [invoiceSlots, setInvoiceSlots] = useState<FileSlot[]>(() =>
@@ -297,9 +332,53 @@ export default function AssetForm({
     }));
   }
 
+  /**
+   * "Import from PDF or Photo": reads a purchase invoice and fills in what it
+   * states - what was bought, from whom, when, for how much, its warranty.
+   * Only offered when creating an asset; an existing one already has its own
+   * data and this would just overwrite edits in progress.
+   *
+   * The FA code, owning company, depreciation, assignment and location are
+   * not touched: those are the company's own decisions, not facts printed on
+   * a vendor's invoice.
+   */
+  async function onDocumentSelected(file: File) {
+    setExtracting(true);
+    const toastId = toast.loading("Reading document…");
+    try {
+      const data = await extractAssetFromDocument(file);
+
+      setForm((f) => ({
+        ...f,
+        product: data.product || f.product,
+        category: data.category || PRODUCT_CATEGORY.get(data.product) || f.category,
+        brand: data.brand || f.brand,
+        productNumber: data.productNumber || f.productNumber,
+        purchaseDate: data.purchaseDate || f.purchaseDate,
+        paymentDate: data.paymentDate || f.paymentDate,
+        invoiceNumber: data.invoiceNumber || f.invoiceNumber,
+        vendor: data.vendor || f.vendor,
+        purchaseCost: data.purchaseCost ? String(data.purchaseCost) : f.purchaseCost,
+        gstPercent: data.gstPercent ? String(data.gstPercent) : f.gstPercent,
+        warrantyProvider: data.warrantyProvider || f.warrantyProvider,
+        warrantyExpiry: data.warrantyExpiry || f.warrantyExpiry,
+        notes: data.notes || f.notes,
+      }));
+
+      toast.success("Imported from the document. Review everything before saving.", {
+        id: toastId,
+        duration: 5000,
+      });
+    } catch (err) {
+      toast.error(apiError(err, "Could not read that document"), { id: toastId });
+    } finally {
+      setExtracting(false);
+    }
+  }
+
   function validate(): boolean {
     const next: Record<string, string> = {};
-    if (!form.assetCode.trim()) next.assetCode = "Enter the FA code";
+    if (!assetCode.trim()) next.assetCode = "Enter the FA code";
     if (!form.entity) next.entity = "Choose ENP or GCC";
     if (!form.product.trim()) next.product = "Select or type a product";
     if (form.purchaseCost && Number(form.purchaseCost) < 0)
@@ -320,7 +399,7 @@ export default function AssetForm({
 
   function buildFormData(): FormData {
     const fd = new FormData();
-    fd.append("assetCode", form.assetCode.trim().toUpperCase());
+    fd.append("assetCode", assetCode.trim().toUpperCase());
     fd.append("entity", form.entity);
     fd.append("product", form.product.trim());
     fd.append("category", form.category.trim());
@@ -449,6 +528,51 @@ export default function AssetForm({
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
+      {/* ---------------- Import from PDF or photo ---------------- */}
+      {!isEdit && (
+        <SectionCard
+          title="Import from PDF or Photo"
+          icon={<FileUp size={16} />}
+          description="Upload the purchase invoice - a PDF, or a photo of it - to pre-fill this form"
+        >
+          <label
+            className={`flex cursor-pointer items-center justify-center gap-2.5 rounded-lg border-2 border-dashed px-4 py-6 text-sm transition ${
+              extracting
+                ? "cursor-not-allowed border-zinc-200 bg-zinc-50 text-zinc-400"
+                : "border-brand-300 bg-brand-50/40 text-brand-700 hover:bg-brand-50"
+            }`}
+          >
+            {extracting ? (
+              <>
+                <Spinner className="h-4 w-4" />
+                Reading document…
+              </>
+            ) : (
+              <>
+                <FileUp size={16} />
+                Click to choose a PDF or photo, or drag one here
+              </>
+            )}
+            <input
+              type="file"
+              accept="application/pdf,image/jpeg,image/jpg,image/png,image/webp,image/heic"
+              disabled={extracting}
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) void onDocumentSelected(file);
+              }}
+            />
+          </label>
+          <p className="mt-2 text-xs text-zinc-500">
+            Fills in the product, vendor, invoice and cost details below. The FA
+            code, company, depreciation and assignment stay yours to set - and
+            everything still needs your own check before saving.
+          </p>
+        </SectionCard>
+      )}
+
       {/* ---------------- Ownership ---------------- */}
       <SectionCard
         title="Ownership"
@@ -465,7 +589,12 @@ export default function AssetForm({
             <Select
               value={form.entity}
               invalid={!!errors.entity}
-              onChange={(e) => set("entity", e.target.value as Entity | "")}
+              onChange={(e) => {
+                set("entity", e.target.value as Entity | "");
+                // Back to automatic: the code is re-derived from the new
+                // company's own series.
+                if (!isEdit) setManualCode(false);
+              }}
             >
               <option value="">Select company…</option>
               {ENTITIES.map((e) => (
@@ -480,16 +609,48 @@ export default function AssetForm({
             label="🏷️ FA Code"
             required
             error={errors.assetCode}
-            hint={!errors.assetCode ? "Your asset tag, e.g. FA-00001 — must be unique" : undefined}
+            hint={
+              errors.assetCode
+                ? undefined
+                : isEdit
+                  ? "Your asset tag — must be unique within the company"
+                  : "Next in this company's series — type over it to use your own"
+            }
           >
-            <Input
-              value={form.assetCode}
-              invalid={!!errors.assetCode}
-              onChange={(e) => set("assetCode", e.target.value.toUpperCase())}
-              placeholder="FA-00001"
-              className="font-mono uppercase"
-              autoComplete="off"
-            />
+            <div className="flex items-center gap-2">
+              <Input
+                value={assetCode}
+                invalid={!!errors.assetCode}
+                onChange={(e) => {
+                  // Typing takes over: the suggestion stops filling the field.
+                  setManualCode(true);
+                  set("assetCode", e.target.value.toUpperCase());
+                }}
+                placeholder="FA-00001"
+                className="font-mono uppercase"
+                autoComplete="off"
+              />
+              {!isEdit && autoCode && manualCode && (
+                <button
+                  type="button"
+                  onClick={() => setManualCode(false)}
+                  title={`Use ${autoCode}, the next free code`}
+                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-brand-300 bg-brand-50 px-2.5 py-2 text-xs font-medium text-brand-800 hover:bg-brand-100"
+                >
+                  <RotateCcw size={13} />
+                  Auto
+                </button>
+              )}
+              {!isEdit && !manualCode && assetCode && (
+                <span
+                  title="Filled automatically - type over it to use your own"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-md bg-brand-100 px-2 py-1.5 text-[11px] font-semibold text-brand-800"
+                >
+                  <Wand2 size={12} />
+                  Auto
+                </span>
+              )}
+            </div>
           </Field>
 
           <div className="flex items-end pb-2">

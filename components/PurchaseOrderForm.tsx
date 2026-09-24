@@ -9,6 +9,7 @@ import {
   Building2,
   ClipboardList,
   FileText,
+  FileUp,
   Landmark,
   Layers,
   ListChecks,
@@ -48,6 +49,7 @@ import { dateInput, money } from "@/lib/format";
 import {
   apiError,
   createPurchaseOrder as createApi,
+  extractPoFromPdf,
   fetchNextPoNumber,
   fetchNextVendorCode,
   fetchVendors,
@@ -252,6 +254,67 @@ export default function PurchaseOrderForm({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [rowErrors, setRowErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+
+  /**
+   * "Import from PDF or Photo": reads a vendor quotation/invoice/old PO - a
+   * PDF, or a photo of one - and pre-fills the Supplier block and item grid
+   * from it. Only offered when creating a new order - an existing one already
+   * has its own data, and this would only overwrite edits in progress.
+   * Deliberately does not touch GST% or tax mode: that's set deliberately by
+   * the user, not guessed from a scan.
+   */
+  async function onPdfSelected(file: File) {
+    setExtracting(true);
+    const toastId = toast.loading("Reading document…");
+    try {
+      const data = await extractPoFromPdf(file);
+
+      setForm((f) => ({
+        ...f,
+        poDate: data.poDate || f.poDate,
+        supplier: {
+          name: data.supplier.name || f.supplier.name,
+          address: data.supplier.address || f.supplier.address,
+          gstNumber: data.supplier.gstNumber || f.supplier.gstNumber,
+          contactPerson: data.supplier.contactPerson || f.supplier.contactPerson,
+          phone: data.supplier.phone || f.supplier.phone,
+          email: data.supplier.email || f.supplier.email,
+        },
+        vendorCode: data.vendorCode || f.vendorCode,
+        currency: data.currency || f.currency,
+        supplierRef: data.supplierRef || f.supplierRef,
+        paymentTerms: data.paymentTerms || f.paymentTerms,
+        notes: data.notes || f.notes,
+      }));
+
+      if (data.items.length) {
+        setRows(
+          data.items.map((item) => ({
+            key: nextKey(),
+            kind: "item",
+            name: item.name,
+            description: item.description,
+            hsnCode: item.hsnCode,
+            quantity: item.quantity ? String(item.quantity) : "1",
+            unit: item.unit || "NOS",
+            price: item.price ? String(item.price) : "",
+          }))
+        );
+      }
+
+      toast.success(
+        `Imported from PDF${
+          data.items.length ? ` - ${data.items.length} item${data.items.length === 1 ? "" : "s"} found` : ""
+        }. Review everything before saving.`,
+        { id: toastId, duration: 5000 }
+      );
+    } catch (err) {
+      toast.error(apiError(err, "Could not read that PDF"), { id: toastId });
+    } finally {
+      setExtracting(false);
+    }
+  }
 
   // The vendor master, fetched once - a suggestion source only, so a failed
   // request leaves the Supplier section exactly as free-form as it always was.
@@ -673,6 +736,50 @@ export default function PurchaseOrderForm({
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4">
+      {/* ---------------- Import from PDF or photo ---------------- */}
+      {!isEdit && (
+        <SectionCard
+          title="Import from PDF or Photo"
+          icon={<FileUp size={16} />}
+          description="Upload a vendor quotation, invoice, or old PO - a PDF, or a photo of it - to pre-fill this form"
+        >
+          <label
+            className={`flex cursor-pointer items-center justify-center gap-2.5 rounded-lg border-2 border-dashed px-4 py-6 text-sm transition ${
+              extracting
+                ? "cursor-not-allowed border-zinc-200 bg-zinc-50 text-zinc-400"
+                : "border-brand-300 bg-brand-50/40 text-brand-700 hover:bg-brand-50"
+            }`}
+          >
+            {extracting ? (
+              <>
+                <Spinner className="h-4 w-4" />
+                Reading document…
+              </>
+            ) : (
+              <>
+                <FileUp size={16} />
+                Click to choose a PDF or photo, or drag one here
+              </>
+            )}
+            <input
+              type="file"
+              accept="application/pdf,image/jpeg,image/jpg,image/png,image/webp,image/heic"
+              disabled={extracting}
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) void onPdfSelected(file);
+              }}
+            />
+          </label>
+          <p className="mt-2 text-xs text-zinc-500">
+            Fills in the supplier and item details below - GST%, dates and
+            everything else still need your own check before saving.
+          </p>
+        </SectionCard>
+      )}
+
       {/* ---------------- Order header ---------------- */}
       <SectionCard
         title="Order"

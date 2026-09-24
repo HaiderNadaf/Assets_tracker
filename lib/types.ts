@@ -360,3 +360,57 @@ export interface Vendor {
   createdAt: string;
   updatedAt: string;
 }
+
+/* ------------------------------------------------------------------ */
+/* PDF import                                                          */
+/* ------------------------------------------------------------------ */
+
+export interface ExtractedPoItem {
+  name: string;
+  description: string;
+  hsnCode: string;
+  quantity: number;
+  unit: string;
+  price: number;
+}
+
+/** What "Import from PDF" pulls out of a vendor quotation/invoice/old PO. */
+export interface ExtractedPoData {
+  supplier: {
+    name: string;
+    gstNumber: string;
+    address: string;
+    contactPerson: string;
+    phone: string;
+    email: string;
+  };
+  vendorCode: string;
+  poDate: string;
+  supplierRef: string;
+  currency: string;
+  paymentTerms: string;
+  items: ExtractedPoItem[];
+  notes: string;
+}
+
+/**
+ * What "Import from PDF or Photo" pulls off a purchase invoice for an asset.
+ *
+ * Only what the vendor's document states - the FA code, entity, depreciation
+ * policy, assignment and location stay the user's own to fill in.
+ */
+export interface ExtractedAssetData {
+  product: string;
+  category: string;
+  brand: string;
+  productNumber: string;
+  purchaseDate: string;
+  paymentDate: string;
+  invoiceNumber: string;
+  vendor: string;
+  purchaseCost: number;
+  gstPercent: number;
+  warrantyProvider: string;
+  warrantyExpiry: string;
+  notes: string;
+}
